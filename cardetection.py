@@ -1,6 +1,7 @@
 # main.py
 import os
 import cv2
+import pandas as pd
 from dotenv import load_dotenv
 from ultralytics import YOLO
 
@@ -114,11 +115,12 @@ for VIDEO_PATH in VIDEO_PATHS:
     car_ids_up = set()
     object_state = {}
     video_base = os.path.splitext(os.path.basename(VIDEO_PATH))[0]
-    # Change output path to under output/高崎渋川線（バイパス） ふれあい歩道橋
-    output_base = os.path.join('output', '高崎渋川線（バイパス） ふれあい歩道橋')
+    # Save output under output/<VIDEO_DIR_NAME>/<video_name>/up, down
+    video_dir_name = os.path.basename(os.path.dirname(VIDEO_PATH))
+    output_base = os.path.join('output', video_dir_name, video_base)
     os.makedirs(output_base, exist_ok=True)
-    save_root_down = os.path.join(output_base, video_base, 'down')
-    save_root_up = os.path.join(output_base, video_base, 'up')
+    save_root_down = os.path.join(output_base, 'down')
+    save_root_up = os.path.join(output_base, 'up')
     os.makedirs(save_root_down, exist_ok=True)
     os.makedirs(save_root_up, exist_ok=True)
 

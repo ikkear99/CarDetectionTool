@@ -1,8 +1,5 @@
 # main.py
 import os
-
-import cv2
-import pandas as pd
 from dotenv import load_dotenv
 from ultralytics import YOLO
 
@@ -11,6 +8,10 @@ load_dotenv()
 VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/上信自動車道 厚田IC/")
 REGION_PATH = os.environ.get("REGION_PATH", "output/region.txt")
 OUTPUT_EXCEL = os.environ.get("OUTPUT_EXCEL", "output/results.xlsx")
+
+# Read region coordinates from environment variables
+REGION1 = os.environ.get("REGION1")
+REGION2 = os.environ.get("REGION2")
 
 VIDEO_PATHS = [os.path.join(VIDEO_DIR, f) for f in os.listdir(VIDEO_DIR) if f.endswith('.mp4')]
 
@@ -24,6 +25,17 @@ model = YOLO("yolov8m.pt")  # You can use yolov8s.pt or yolov8m.pt for higher ac
 model.to("cuda")  # Move model to GPU
 print(f"[INFO] YOLO model is using device: {model.device}")
 
+# Read region_rectangles from .env if available
+region_rectangles = []
+if REGION1 and REGION2:
+    try:
+        coords1 = tuple(map(int, REGION1.split(",")))
+        coords2 = tuple(map(int, REGION2.split(",")))
+        region_rectangles = [((coords1[0], coords1[1]), (coords1[2], coords1[3])),
+                             ((coords2[0], coords2[1]), (coords2[2], coords2[3]))]
+        print(f"[INFO] Loaded rectangles from .env: {region_rectangles}")
+    except Exception as e:
+        print(f"[ERROR] Failed to parse REGION1/REGION2: {e}")
 
 def draw_rectangle(event, x, y, flags, param):
     global region_rectangles
@@ -258,7 +270,7 @@ for VIDEO_PATH in VIDEO_PATHS:
     cv2.destroyAllWindows()
 
 # Step 3: Save results
-# Đảm bảo các biến luôn được khởi tạo để tránh warning
+# Ensure variables are always initialized to avoid warnings
 car_count_down = len(car_ids_down) if 'car_ids_down' in locals() else 0
 car_count_up = len(car_ids_up) if 'car_ids_up' in locals() else 0
 print(f"[INFO] Total cars counted (down): {car_count_down}")

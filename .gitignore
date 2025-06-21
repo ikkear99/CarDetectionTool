@@ -68,9 +68,7 @@ output/
 *.pt
 
 # Demo images
-*.png
-
-demo.png
+!demo.png
 
 # Node.js
 node_modules/
@@ -87,4 +85,3 @@ ToolCountJS/__MACOSX/
 
 # Video files
 video/
-

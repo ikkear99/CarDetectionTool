@@ -1,9 +1,9 @@
 # main.py
 import os
-from dotenv import load_dotenv
 
 import cv2
 import pandas as pd
+from dotenv import load_dotenv
 from ultralytics import YOLO
 
 load_dotenv()
@@ -101,7 +101,7 @@ for VIDEO_PATH in VIDEO_PATHS:
     cap = cv2.VideoCapture(VIDEO_PATH)
     frame_idx = 0
     car_count_down = 0  # Downward direction (region 2 -> region 1)
-    car_count_up = 0    # Upward direction (region 1 -> region 2)
+    car_count_up = 0  # Upward direction (region 1 -> region 2)
     data = []
     car_ids_down = set()
     car_ids_up = set()
@@ -162,20 +162,22 @@ for VIDEO_PATH in VIDEO_PATHS:
                 state = object_state[track_id]
 
                 # Check for entering region 1 (bottom)
-                if not state["entered_rect1"] and is_inside_rectangle((cx, cy), region_rectangles[0][0], region_rectangles[0][1]):
+                if not state["entered_rect1"] and is_inside_rectangle((cx, cy), region_rectangles[0][0],
+                                                                      region_rectangles[0][1]):
                     state["entered_rect1"] = True
                     if state["first_entered"] is None:
                         state["first_entered"] = "rect1"
                 # Check for entering region 2 (top)
-                if not state["entered_rect2"] and is_inside_rectangle((cx, cy), region_rectangles[1][0], region_rectangles[1][1]):
+                if not state["entered_rect2"] and is_inside_rectangle((cx, cy), region_rectangles[1][0],
+                                                                      region_rectangles[1][1]):
                     state["entered_rect2"] = True
                     if state["first_entered"] is None:
                         state["first_entered"] = "rect2"
 
                 # Down: region 1 -> region 2
                 if (
-                    state["entered_rect1"] and state["entered_rect2"] and
-                    not state["counted_down"] and state["first_entered"] == "rect1"
+                        state["entered_rect1"] and state["entered_rect2"] and
+                        not state["counted_down"] and state["first_entered"] == "rect1"
                 ):
                     if track_id not in car_ids_down:
                         car_ids_down.add(track_id)
@@ -191,8 +193,8 @@ for VIDEO_PATH in VIDEO_PATHS:
                         state["counted_down"] = True
                 # Up: region 2 -> region 1
                 if (
-                    state["entered_rect1"] and state["entered_rect2"] and
-                    not state["counted_up"] and state["first_entered"] == "rect2"
+                        state["entered_rect1"] and state["entered_rect2"] and
+                        not state["counted_up"] and state["first_entered"] == "rect2"
                 ):
                     if track_id not in car_ids_up:
                         car_ids_up.add(track_id)
@@ -219,7 +221,8 @@ for VIDEO_PATH in VIDEO_PATHS:
         h, w = frame.shape[:2]
         down_text = f"Down: {car_count_down}"
         (down_text_width, down_text_height), _ = cv2.getTextSize(down_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
-        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
+                    3)
         # Display FPS at the top right corner
         text = f"FPS: {fps:.2f}"
         y = 30

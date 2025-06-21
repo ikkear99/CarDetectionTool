@@ -1,11 +1,18 @@
-# File: draw_rectangles_for_txt.py
-# Description: Tool for drawing two regions (rectangles) on the first frame of each video in every subfolder of VIDEO_DIR.
-# For each subfolder, the user draws 2 rectangles on the first video frame. The coordinates are saved to a .txt file named after the video file (e.g. 2025-05-22_07-00-00.txt).
-# The .txt file format: 8 comma-separated integers: x1,y1,x2,y2,x3,y3,x4,y4
-#   - First 4 values: REGION1 (top-left x1,y1, bottom-right x2,y2)
-#   - Last 4 values: REGION2 (top-left x3,y3, bottom-right x4,y4)
-# Example: 39,373,1246,706,33,21,1233,364
-# Each video in a subfolder will have its own region file.
+"""
+Region Annotation Tool for Vehicle Detection
+-------------------------------------------
+This script allows the user to draw two rectangular regions on the first frame of each video in every subfolder of VIDEO_DIR.
+The coordinates of these regions are saved to a .txt file for each video, which will be used for vehicle counting and direction analysis in downstream processing (e.g., cardetection.py).
+
+Features:
+- Loads the first frame of each video in all subfolders.
+- Lets the user interactively draw two rectangles (regions of interest).
+- Saves the coordinates to a .txt file named after the video file.
+- The .txt file format: 8 comma-separated integers (x1,y1,x2,y2,x3,y3,x4,y4).
+
+Author: [Ikkear99]
+Date: 2025-06-21
+"""
 
 
 import os

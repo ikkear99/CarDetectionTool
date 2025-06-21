@@ -1,3 +1,19 @@
+"""
+OneDrive Secure File Downloader
+------------------------------
+This script downloads video files from Microsoft OneDrive using the Microsoft Graph API with OAuth2 authentication.
+It retrieves file metadata and downloads the content for each file ID specified, saving them to a local directory.
+
+Features:
+- Authenticates securely with Microsoft Graph API.
+- Downloads files by file ID and saves them to a specified directory.
+- Handles large files with streaming download.
+- Prints status messages for each download.
+
+Author: [Your Name]
+Date: 2025-06-21
+"""
+
 import os
 import requests
 import msal

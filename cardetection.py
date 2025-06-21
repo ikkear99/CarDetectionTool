@@ -1,4 +1,20 @@
-# main.py
+"""
+Car Detection and Lane Counting System
+--------------------------------------
+This project uses YOLOv8 (yolov8x.pt) for vehicle detection and tracking in video files.
+It automatically detects vehicles (car, truck, bus, motorcycle, bicycle) in videos, tracks their movement across two defined regions, and counts vehicles by direction (lane_1 and lane_2).
+
+Features:
+- Detects and tracks vehicles in video using YOLOv8.
+- Counts vehicles moving between two user-defined regions (lanes).
+- Saves cropped images of counted vehicles for each period.
+- Outputs results to an Excel file.
+- Supports batch processing of multiple videos.
+
+Author: [Ikkear99]
+Date: 2025-06-21
+"""
+
 import os
 import glob
 

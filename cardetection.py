@@ -100,7 +100,10 @@ for VIDEO_PATH in VIDEO_PATHS:
             [(coords[4], coords[5]), (coords[6], coords[7])]
         ]
     print(f"[INFO] Loaded region from {region_file}: {region_rectangles}")
-    # Save region demo image for this video into the same folder as the video
+    # Save region demo image for this video into apply_region folder inside the video folder
+    apply_region_dir = os.path.join(video_folder, "apply_region")
+    os.makedirs(apply_region_dir, exist_ok=True)
+    demo_img_path = os.path.join(apply_region_dir, video_name + "_region_demo.png")
     cap_demo = cv2.VideoCapture(VIDEO_PATH)
     ret_demo, frame_demo = cap_demo.read()
     cap_demo.release()
@@ -108,7 +111,6 @@ for VIDEO_PATH in VIDEO_PATHS:
         frame_demo_copy = frame_demo.copy()
         for rect in region_rectangles:
             cv2.rectangle(frame_demo_copy, rect[0], rect[1], (0, 255, 255), 2)
-        demo_img_path = os.path.join(video_folder, video_name + "_region_demo.png")
         cv2.imwrite(demo_img_path, frame_demo_copy)
         print(f"[INFO] Saved region demo image to {demo_img_path}")
     else:
@@ -118,22 +120,22 @@ for VIDEO_PATH in VIDEO_PATHS:
     cap = cv2.VideoCapture(VIDEO_PATH)
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_idx = 0
-    car_count_down = 0
-    car_count_up = 0
+    car_count_lane_1 = 0
+    car_count_lane_2 = 0
     data = []
-    car_ids_down = set()
-    car_ids_up = set()
+    car_ids_lane_1 = set()
+    car_ids_lane_2 = set()
     object_state = {}
     video_base = os.path.splitext(os.path.basename(VIDEO_PATH))[0]
     video_dir_name = os.path.basename(os.path.dirname(VIDEO_PATH))
     output_base = os.path.join('output', video_dir_name, video_base)
     os.makedirs(output_base, exist_ok=True)
-    save_root_down = os.path.join(output_base, 'down')
-    save_root_up = os.path.join(output_base, 'up')
-    os.makedirs(save_root_down, exist_ok=True)
-    os.makedirs(save_root_up, exist_ok=True)
-    counted_cars_in_period_down = []
-    counted_cars_in_period_up = []
+    save_root_lane_1 = os.path.join(output_base, 'lane_1')
+    save_root_lane_2 = os.path.join(output_base, 'lane_2')
+    os.makedirs(save_root_lane_1, exist_ok=True)
+    os.makedirs(save_root_lane_2, exist_ok=True)
+    counted_cars_in_period_lane_1 = []
+    counted_cars_in_period_lane_2 = []
     current_period = 0
     period_length_min = 10
     period_length_frame = int(fps * 60 * period_length_min)
@@ -144,10 +146,10 @@ for VIDEO_PATH in VIDEO_PATHS:
         ret, frame = cap.read()
         if not ret:
             # Save remaining cars at the end of the video
-            if counted_cars_in_period_down:
-                save_counted_cars(counted_cars_in_period_down, save_root_down, current_period)
-            if counted_cars_in_period_up:
-                save_counted_cars(counted_cars_in_period_up, save_root_up, current_period)
+            if counted_cars_in_period_lane_1:
+                save_counted_cars(counted_cars_in_period_lane_1, save_root_lane_1, current_period)
+            if counted_cars_in_period_lane_2:
+                save_counted_cars(counted_cars_in_period_lane_2, save_root_lane_2, current_period)
             break
 
         results = model.track(frame, persist=True)[0]
@@ -187,39 +189,39 @@ for VIDEO_PATH in VIDEO_PATHS:
                     if state["first_entered"] is None:
                         state["first_entered"] = "rect2"
 
-                # Down: region 1 -> region 2
+                # Lane 1: region 1 -> region 2
                 if (
                         state["entered_rect1"] and state["entered_rect2"] and
                         not state["counted_down"] and state["first_entered"] == "rect1"
                 ):
-                    if track_id not in car_ids_down:
-                        car_ids_down.add(track_id)
-                        car_count_down += 1
+                    if track_id not in car_ids_lane_1:
+                        car_ids_lane_1.add(track_id)
+                        car_count_lane_1 += 1
                         data.append({
                             "frame": frame_idx,
                             "car_id": track_id,
-                            "car_count_down": car_count_down,
-                            "direction": "down"
+                            "car_count_lane_1": car_count_lane_1,
+                            "lane": "lane_1"
                         })
-                        counted_cars_in_period_down.append(
-                            (x1, y1, x2, y2, car_count_down, track_id, frame_idx, frame.copy()))
+                        counted_cars_in_period_lane_1.append(
+                            (x1, y1, x2, y2, car_count_lane_1, track_id, frame_idx, frame.copy()))
                         state["counted_down"] = True
-                # Up: region 2 -> region 1
+                # Lane 2: region 2 -> region 1
                 if (
                         state["entered_rect1"] and state["entered_rect2"] and
                         not state["counted_up"] and state["first_entered"] == "rect2"
                 ):
-                    if track_id not in car_ids_up:
-                        car_ids_up.add(track_id)
-                        car_count_up += 1
+                    if track_id not in car_ids_lane_2:
+                        car_ids_lane_2.add(track_id)
+                        car_count_lane_2 += 1
                         data.append({
                             "frame": frame_idx,
                             "car_id": track_id,
-                            "car_count_up": car_count_up,
-                            "direction": "up"
+                            "car_count_lane_2": car_count_lane_2,
+                            "lane": "lane_2"
                         })
-                        counted_cars_in_period_up.append(
-                            (x1, y1, x2, y2, car_count_up, track_id, frame_idx, frame.copy()))
+                        counted_cars_in_period_lane_2.append(
+                            (x1, y1, x2, y2, car_count_lane_2, track_id, frame_idx, frame.copy()))
                         state["counted_up"] = True
 
         # Draw rectangles
@@ -228,13 +230,13 @@ for VIDEO_PATH in VIDEO_PATHS:
 
         frame_idx += 1
         # Show both counts with new positions and highlight colors
-        # Up: top-left, color: (0, 0, 255) - Red
-        cv2.putText(frame, f"Up: {car_count_up}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-        # Down: bottom-right, color: (0, 255, 255) - Yellow
+        # Lane 2: top-left, color: (0, 0, 255) - Red
+        cv2.putText(frame, f"Lane 2: {car_count_lane_2}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+        # Lane 1: bottom-right, color: (0, 255, 255) - Yellow
         h, w = frame.shape[:2]
-        down_text = f"Down: {car_count_down}"
-        (down_text_width, down_text_height), _ = cv2.getTextSize(down_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
-        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
+        lane_1_text = f"Lane 1: {car_count_lane_1}"
+        (lane_1_text_width, lane_1_text_height), _ = cv2.getTextSize(lane_1_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
+        cv2.putText(frame, lane_1_text, (w - lane_1_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
                     3)
         # Display FPS at the top right corner
         text = f"FPS: {fps:.2f}"
@@ -255,28 +257,28 @@ for VIDEO_PATH in VIDEO_PATHS:
         # Change here: divide period by 600 real video seconds
         period_idx = video_time_sec // 600
         if period_idx != current_period:
-            if counted_cars_in_period_down:
-                save_counted_cars(counted_cars_in_period_down, save_root_down, current_period)
-            if counted_cars_in_period_up:
-                save_counted_cars(counted_cars_in_period_up, save_root_up, current_period)
-            counted_cars_in_period_down = []
-            counted_cars_in_period_up = []
+            if counted_cars_in_period_lane_1:
+                save_counted_cars(counted_cars_in_period_lane_1, save_root_lane_1, current_period)
+            if counted_cars_in_period_lane_2:
+                save_counted_cars(counted_cars_in_period_lane_2, save_root_lane_2, current_period)
+            counted_cars_in_period_lane_1 = []
+            counted_cars_in_period_lane_2 = []
             current_period = period_idx
-            car_ids_down = set()
-            car_ids_up = set()
+            car_ids_lane_1 = set()
+            car_ids_lane_2 = set()
             object_state = {}
-            car_count_down = 0
-            car_count_up = 0
+            car_count_lane_1 = 0
+            car_count_lane_2 = 0
 
     cap.release()
     cv2.destroyAllWindows()
 
 # Step 3: Save results
 # Ensure variables are always initialized to avoid warnings
-car_count_down = len(car_ids_down) if 'car_ids_down' in locals() else 0
-car_count_up = len(car_ids_up) if 'car_ids_up' in locals() else 0
-print(f"[INFO] Total cars counted (down): {car_count_down}")
-print(f"[INFO] Total cars counted (up): {car_count_up}")
+car_count_lane_1 = len(car_ids_lane_1) if 'car_ids_lane_1' in locals() else 0
+car_count_lane_2 = len(car_ids_lane_2) if 'car_ids_lane_2' in locals() else 0
+print(f"[INFO] Total cars counted (lane_1): {car_count_lane_1}")
+print(f"[INFO] Total cars counted (lane_2): {car_count_lane_2}")
 df = pd.DataFrame(data) if 'data' in locals() else pd.DataFrame()
 df.to_excel(OUTPUT_EXCEL, index=False)
 print(f"[INFO] Results saved to {OUTPUT_EXCEL}")

@@ -1,5 +1,7 @@
 # main.py
 import os
+import glob
+
 import cv2
 import pandas as pd
 from dotenv import load_dotenv
@@ -7,17 +9,14 @@ from ultralytics import YOLO
 
 load_dotenv()
 
-VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/上信自動車道 厚田IC/")
+VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/")
 REGION_PATH = os.environ.get("REGION_PATH", "output/region.txt")
 OUTPUT_EXCEL = os.environ.get("OUTPUT_EXCEL", "output/results.xlsx")
 SHOW_VIDEO = os.environ.get("SHOW_VIDEO", "0") == "1"  # Set SHOW_VIDEO=1 in .env to enable video display
 REGION_IMAGE_DIR = os.environ.get("REGION_IMAGE_DIR", "output/region_demo/")
+YOLO_MODEL = os.environ.get("YOLO_MODEL", "yolov8m.pt")
 
-# Read region coordinates from environment variables
-REGION1 = os.environ.get("REGION1")
-REGION2 = os.environ.get("REGION2")
-
-VIDEO_PATHS = [os.path.join(VIDEO_DIR, f) for f in os.listdir(VIDEO_DIR) if f.endswith('.mp4')]
+VIDEO_PATHS = glob.glob("video/**/*.mp4", recursive=True)
 
 os.makedirs("output", exist_ok=True)
 os.makedirs(REGION_IMAGE_DIR, exist_ok=True)
@@ -26,31 +25,17 @@ car_count = 0
 object_state = {}
 region_lines = []
 
-model = YOLO("yolov8m.pt")  # You can use yolov8s.pt or yolov8m.pt for higher accuracy
+model = YOLO(YOLO_MODEL)  # Load model from .env or default
 model.to("cuda")  # Move model to GPU
 print(f"[INFO] YOLO model is using device: {model.device}")
 
-# Read region_rectangles from .env if available
-region_rectangles = []
-if REGION1 and REGION2:
-    try:
-        coords1 = tuple(map(int, REGION1.split(",")))
-        coords2 = tuple(map(int, REGION2.split(",")))
-        region_rectangles = [((coords1[0], coords1[1]), (coords1[2], coords1[3])),
-                             ((coords2[0], coords2[1]), (coords2[2], coords2[3]))]
-        print(f"[INFO] Loaded rectangles from .env: {region_rectangles}")
-    except Exception as e:
-        print(f"[ERROR] Failed to parse REGION1/REGION2: {e}")
-
 # --- Region demo image capture ---
-if region_rectangles and VIDEO_PATHS:
+if VIDEO_PATHS:
     cap_demo = cv2.VideoCapture(VIDEO_PATHS[0])
     ret_demo, frame_demo = cap_demo.read()
     cap_demo.release()
     if ret_demo:
         frame_demo_copy = frame_demo.copy()
-        for rect in region_rectangles:
-            cv2.rectangle(frame_demo_copy, rect[0], rect[1], (0, 255, 255), 2)
         demo_img_path = os.path.join(REGION_IMAGE_DIR, "region_demo.png")
         cv2.imwrite(demo_img_path, frame_demo_copy)
         print(f"[INFO] Saved region demo image to {demo_img_path}")
@@ -73,17 +58,6 @@ if not ret:
 
 frame_copy = frame.copy()
 
-# region_rectangles is always loaded from .env, no need to draw or load from file
-
-# --- Load rectangles from file if needed ---
-if not region_rectangles:
-    with open(REGION_PATH, "r") as f:
-        coords = list(map(int, f.read().strip().split(",")))
-        region_rectangles = [
-            [(coords[0], coords[1]), (coords[2], coords[3])],
-            [(coords[4], coords[5]), (coords[6], coords[7])]
-        ]
-
 
 def is_inside_rectangle(point, rect_top_left, rect_bottom_right):
     x, y = point
@@ -104,18 +78,53 @@ def save_counted_cars(counted_cars, save_root, period):
 
 
 # --- Main loop ---
+all_data = []  # Collect results from all videos
 for VIDEO_PATH in VIDEO_PATHS:
     print(f"[INFO] Processing video: {VIDEO_PATH}")
+    video_folder = os.path.dirname(VIDEO_PATH)
+    video_name = os.path.splitext(os.path.basename(VIDEO_PATH))[0]
+    # Find the only .txt file in the folder (region file)
+    region_txt_files = [f for f in os.listdir(video_folder) if f.endswith('.txt')]
+    if not region_txt_files:
+        print(f"[WARNING] No region txt file found in {video_folder}. Skipping this video!")
+        continue
+    region_file = os.path.join(video_folder, region_txt_files[0])
+    region_rectangles = []
+    with open(region_file, "r", encoding="utf-8") as f:
+        coords = list(map(int, f.read().strip().split(",")))
+        if len(coords) != 8:
+            print(f"[WARNING] {region_file} does not have 8 coordinates. Skipping this video!")
+            continue
+        region_rectangles = [
+            [(coords[0], coords[1]), (coords[2], coords[3])],
+            [(coords[4], coords[5]), (coords[6], coords[7])]
+        ]
+    print(f"[INFO] Loaded region from {region_file}: {region_rectangles}")
+    # Save region demo image for this video into the same folder as the video
+    cap_demo = cv2.VideoCapture(VIDEO_PATH)
+    ret_demo, frame_demo = cap_demo.read()
+    cap_demo.release()
+    if ret_demo:
+        frame_demo_copy = frame_demo.copy()
+        for rect in region_rectangles:
+            cv2.rectangle(frame_demo_copy, rect[0], rect[1], (0, 255, 255), 2)
+        demo_img_path = os.path.join(video_folder, video_name + "_region_demo.png")
+        cv2.imwrite(demo_img_path, frame_demo_copy)
+        print(f"[INFO] Saved region demo image to {demo_img_path}")
+    else:
+        print("[WARNING] Could not read frame for region demo image.")
+
+    # Open video again for processing and get fps for this video
     cap = cv2.VideoCapture(VIDEO_PATH)
+    fps = cap.get(cv2.CAP_PROP_FPS)
     frame_idx = 0
-    car_count_down = 0  # Downward direction (region 2 -> region 1)
-    car_count_up = 0  # Upward direction (region 1 -> region 2)
+    car_count_down = 0
+    car_count_up = 0
     data = []
     car_ids_down = set()
     car_ids_up = set()
     object_state = {}
     video_base = os.path.splitext(os.path.basename(VIDEO_PATH))[0]
-    # Save output under output/<VIDEO_DIR_NAME>/<video_name>/up, down
     video_dir_name = os.path.basename(os.path.dirname(VIDEO_PATH))
     output_base = os.path.join('output', video_dir_name, video_base)
     os.makedirs(output_base, exist_ok=True)
@@ -123,11 +132,6 @@ for VIDEO_PATH in VIDEO_PATHS:
     save_root_up = os.path.join(output_base, 'up')
     os.makedirs(save_root_down, exist_ok=True)
     os.makedirs(save_root_up, exist_ok=True)
-
-    # Get fps to calculate minutes
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    # Change here
     counted_cars_in_period_down = []
     counted_cars_in_period_up = []
     current_period = 0
@@ -230,7 +234,8 @@ for VIDEO_PATH in VIDEO_PATHS:
         h, w = frame.shape[:2]
         down_text = f"Down: {car_count_down}"
         (down_text_width, down_text_height), _ = cv2.getTextSize(down_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
-        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
+        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
+                    3)
         # Display FPS at the top right corner
         text = f"FPS: {fps:.2f}"
         y = 30

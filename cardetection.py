@@ -1,5 +1,6 @@
 # main.py
 import os
+import cv2
 from dotenv import load_dotenv
 from ultralytics import YOLO
 
@@ -8,6 +9,8 @@ load_dotenv()
 VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/上信自動車道 厚田IC/")
 REGION_PATH = os.environ.get("REGION_PATH", "output/region.txt")
 OUTPUT_EXCEL = os.environ.get("OUTPUT_EXCEL", "output/results.xlsx")
+SHOW_VIDEO = os.environ.get("SHOW_VIDEO", "0") == "1"  # Set SHOW_VIDEO=1 in .env to enable video display
+REGION_IMAGE_DIR = os.environ.get("REGION_IMAGE_DIR", "output/region_demo/")
 
 # Read region coordinates from environment variables
 REGION1 = os.environ.get("REGION1")
@@ -16,6 +19,7 @@ REGION2 = os.environ.get("REGION2")
 VIDEO_PATHS = [os.path.join(VIDEO_DIR, f) for f in os.listdir(VIDEO_DIR) if f.endswith('.mp4')]
 
 os.makedirs("output", exist_ok=True)
+os.makedirs(REGION_IMAGE_DIR, exist_ok=True)
 region = []
 car_count = 0
 object_state = {}
@@ -37,23 +41,20 @@ if REGION1 and REGION2:
     except Exception as e:
         print(f"[ERROR] Failed to parse REGION1/REGION2: {e}")
 
-def draw_rectangle(event, x, y, flags, param):
-    global region_rectangles
-    if event == cv2.EVENT_LBUTTONDOWN:
-        region_rectangles.append([(x, y)])
-    elif event == cv2.EVENT_LBUTTONUP:
-        region_rectangles[-1].append((x, y))
-        cv2.rectangle(frame_copy, region_rectangles[-1][0], region_rectangles[-1][1], (0, 255, 0), 2)
-        cv2.imshow("Select 2 Rectangles", frame_copy)
-        if len(region_rectangles) == 2:
-            with open(REGION_PATH, "w") as f:
-                # save 2 rectangles
-                coord = ",".join(map(str, sum(region_rectangles, [])))  # flatten list
-                f.write(coord)
-            print(f"[INFO] 2 rectangles saved to {REGION_PATH}")
-            cv2.waitKey(500)
-            cv2.destroyAllWindows()
-
+# --- Region demo image capture ---
+if region_rectangles and VIDEO_PATHS:
+    cap_demo = cv2.VideoCapture(VIDEO_PATHS[0])
+    ret_demo, frame_demo = cap_demo.read()
+    cap_demo.release()
+    if ret_demo:
+        frame_demo_copy = frame_demo.copy()
+        for rect in region_rectangles:
+            cv2.rectangle(frame_demo_copy, rect[0], rect[1], (0, 255, 255), 2)
+        demo_img_path = os.path.join(REGION_IMAGE_DIR, "region_demo.png")
+        cv2.imwrite(demo_img_path, frame_demo_copy)
+        print(f"[INFO] Saved region demo image to {demo_img_path}")
+    else:
+        print("[WARNING] Could not read frame for region demo image.")
 
 # Step 1: Select Line A -> B
 VIDEO_PATH = VIDEO_PATHS[0]
@@ -71,13 +72,7 @@ if not ret:
 
 frame_copy = frame.copy()
 
-# --- Select 2 Rectangles ---
-region_rectangles = []
-if not os.path.exists(REGION_PATH):
-    cv2.imshow("Select 2 Rectangles", frame_copy)
-    cv2.setMouseCallback("Select 2 Rectangles", draw_rectangle)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+# region_rectangles is always loaded from .env, no need to draw or load from file
 
 # --- Load rectangles from file if needed ---
 if not region_rectangles:
@@ -233,8 +228,7 @@ for VIDEO_PATH in VIDEO_PATHS:
         h, w = frame.shape[:2]
         down_text = f"Down: {car_count_down}"
         (down_text_width, down_text_height), _ = cv2.getTextSize(down_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
-        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
-                    3)
+        cv2.putText(frame, down_text, (w - down_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255), 3)
         # Display FPS at the top right corner
         text = f"FPS: {fps:.2f}"
         y = 30
@@ -246,9 +240,10 @@ for VIDEO_PATH in VIDEO_PATHS:
         sec_x = frame.shape[1] - sec_text_width - 20
         sec_y = y + 20
         cv2.putText(frame, sec_text, (sec_x, sec_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-        cv2.imshow("Video", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        if SHOW_VIDEO:
+            cv2.imshow("Video", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
         # Change here: divide period by 600 real video seconds
         period_idx = video_time_sec // 600

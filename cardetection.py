@@ -8,11 +8,11 @@ from ultralytics import YOLO
 
 load_dotenv()
 
-VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/（主）高崎渋川線（バイパス） ふれあい歩道橋/")
+VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/上信自動車道 厚田IC/")
 REGION_PATH = os.environ.get("REGION_PATH", "output/region.txt")
 OUTPUT_EXCEL = os.environ.get("OUTPUT_EXCEL", "output/results.xlsx")
 
-VIDEO_PATHS = [os.path.join(VIDEO_DIR, f) for f in os.listdir(VIDEO_DIR) if f.endswith('.mp3')]
+VIDEO_PATHS = [os.path.join(VIDEO_DIR, f) for f in os.listdir(VIDEO_DIR) if f.endswith('.mp4')]
 
 os.makedirs("output", exist_ok=True)
 region = []

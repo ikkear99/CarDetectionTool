@@ -15,8 +15,8 @@ Author: [Ikkear99]
 Date: 2025-06-21
 """
 
-import os
 import glob
+import os
 
 import cv2
 import pandas as pd
@@ -29,34 +29,19 @@ VIDEO_DIR = os.environ.get("VIDEO_DIR", "video/")
 REGION_PATH = os.environ.get("REGION_PATH", "output/region.txt")
 OUTPUT_EXCEL = os.environ.get("OUTPUT_EXCEL", "output/results.xlsx")
 SHOW_VIDEO = os.environ.get("SHOW_VIDEO", "0") == "1"  # Set SHOW_VIDEO=1 in .env to enable video display
-REGION_IMAGE_DIR = os.environ.get("REGION_IMAGE_DIR", "output/region_demo/")
 YOLO_MODEL = os.environ.get("YOLO_MODEL", "yolov8m.pt")
 
 VIDEO_PATHS = glob.glob("video/**/*.mp4", recursive=True)
 
 os.makedirs("output", exist_ok=True)
-os.makedirs(REGION_IMAGE_DIR, exist_ok=True)
 region = []
 car_count = 0
 object_state = {}
 region_lines = []
 
 model = YOLO(YOLO_MODEL)  # Load model from .env or default
-model.to("cuda")  # Move model to GPU
+# model.to("cuda")  # Move model to GPU
 print(f"[INFO] YOLO model is using device: {model.device}")
-
-# --- Region demo image capture ---
-if VIDEO_PATHS:
-    cap_demo = cv2.VideoCapture(VIDEO_PATHS[0])
-    ret_demo, frame_demo = cap_demo.read()
-    cap_demo.release()
-    if ret_demo:
-        frame_demo_copy = frame_demo.copy()
-        demo_img_path = os.path.join(REGION_IMAGE_DIR, "region_demo.png")
-        cv2.imwrite(demo_img_path, frame_demo_copy)
-        print(f"[INFO] Saved region demo image to {demo_img_path}")
-    else:
-        print("[WARNING] Could not read frame for region demo image.")
 
 # Step 1: Select Line A -> B
 VIDEO_PATH = VIDEO_PATHS[0]
@@ -95,6 +80,10 @@ def save_counted_cars(counted_cars, save_root, period):
 
 # --- Main loop ---
 all_data = []  # Collect results from all videos
+global_car_ids_lane_1 = set()  # Global tracking across all periods
+global_car_ids_lane_2 = set()  # Global tracking across all periods
+global_object_state = {}  # Global state tracking across all periods
+
 for VIDEO_PATH in VIDEO_PATHS:
     print(f"[INFO] Processing video: {VIDEO_PATH}")
     video_folder = os.path.dirname(VIDEO_PATH)
@@ -210,8 +199,10 @@ for VIDEO_PATH in VIDEO_PATHS:
                         state["entered_rect1"] and state["entered_rect2"] and
                         not state["counted_down"] and state["first_entered"] == "rect1"
                 ):
-                    if track_id not in car_ids_lane_1:
+                    # Check both local and global tracking to prevent duplicates
+                    if track_id not in car_ids_lane_1 and track_id not in global_car_ids_lane_1:
                         car_ids_lane_1.add(track_id)
+                        global_car_ids_lane_1.add(track_id)  # Add to global tracking
                         car_count_lane_1 += 1
                         data.append({
                             "frame": frame_idx,
@@ -227,8 +218,10 @@ for VIDEO_PATH in VIDEO_PATHS:
                         state["entered_rect1"] and state["entered_rect2"] and
                         not state["counted_up"] and state["first_entered"] == "rect2"
                 ):
-                    if track_id not in car_ids_lane_2:
+                    # Check both local and global tracking to prevent duplicates
+                    if track_id not in car_ids_lane_2 and track_id not in global_car_ids_lane_2:
                         car_ids_lane_2.add(track_id)
+                        global_car_ids_lane_2.add(track_id)  # Add to global tracking
                         car_count_lane_2 += 1
                         data.append({
                             "frame": frame_idx,
@@ -252,7 +245,8 @@ for VIDEO_PATH in VIDEO_PATHS:
         h, w = frame.shape[:2]
         lane_1_text = f"Lane 1: {car_count_lane_1}"
         (lane_1_text_width, lane_1_text_height), _ = cv2.getTextSize(lane_1_text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)
-        cv2.putText(frame, lane_1_text, (w - lane_1_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 255),
+        cv2.putText(frame, lane_1_text, (w - lane_1_text_width - 20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+                    (0, 255, 255),
                     3)
         # Display FPS at the top right corner
         text = f"FPS: {fps:.2f}"
@@ -271,7 +265,7 @@ for VIDEO_PATH in VIDEO_PATHS:
                 break
 
         # Change here: divide period by 600 real video seconds
-        period_idx = video_time_sec // 600
+        period_idx = video_time_sec // 20
         if period_idx != current_period:
             if counted_cars_in_period_lane_1:
                 save_counted_cars(counted_cars_in_period_lane_1, save_root_lane_1, current_period)
@@ -280,6 +274,7 @@ for VIDEO_PATH in VIDEO_PATHS:
             counted_cars_in_period_lane_1 = []
             counted_cars_in_period_lane_2 = []
             current_period = period_idx
+            # Only reset local counters, keep global tracking
             car_ids_lane_1 = set()
             car_ids_lane_2 = set()
             object_state = {}
@@ -290,16 +285,26 @@ for VIDEO_PATH in VIDEO_PATHS:
     cv2.destroyAllWindows()
 
 # Step 3: Save results
-# Ensure variables are always initialized to avoid warnings
-car_count_lane_1 = len(car_ids_lane_1) if 'car_ids_lane_1' in locals() else 0
-car_count_lane_2 = len(car_ids_lane_2) if 'car_ids_lane_2' in locals() else 0
-print(f"[INFO] Total cars counted (lane_1): {car_count_lane_1}")
-print(f"[INFO] Total cars counted (lane_2): {car_count_lane_2}")
+# Use global counts for final results
+final_car_count_lane_1 = len(global_car_ids_lane_1)
+final_car_count_lane_2 = len(global_car_ids_lane_2)
+print(f"[INFO] Total cars counted (lane_1): {final_car_count_lane_1}")
+print(f"[INFO] Total cars counted (lane_2): {final_car_count_lane_2}")
 df = pd.DataFrame(data) if 'data' in locals() else pd.DataFrame()
 df.to_excel(OUTPUT_EXCEL, index=False)
 print(f"[INFO] Results saved to {OUTPUT_EXCEL}")
 
-# Check if the REGION_PATH file exists and delete it
-if os.path.exists(REGION_PATH):
-    os.remove(REGION_PATH)
-print(f"[INFO] Existing file at {REGION_PATH} has been deleted.")
+# Todo Step 4: Summarize data by 10-minute blocks 
+if not df.empty:
+    # Add a column for 10-minute block
+    df['block'] = (df['frame'] / (fps * 60 * 10)).astype(int)
+    # Group by video, lane, and block, then sum car counts
+    summary = df.groupby(['lane', 'block']).agg({'car_count_lane_1': 'sum', 'car_count_lane_2': 'sum'}).reset_index()
+    summary['video'] = os.path.basename(VIDEO_PATH)  # Add video name to the summary
+
+    # Save the summary to a separate Excel file
+    summary_excel = "output/summary.xlsx"
+    summary.to_excel(summary_excel, index=False)
+    print(f"[INFO] Summary saved to {summary_excel}")
+else:
+    print("[INFO] No data to summarize.")

@@ -265,7 +265,7 @@ for VIDEO_PATH in VIDEO_PATHS:
                 break
 
         # Change here: divide period by 600 real video seconds
-        period_idx = video_time_sec // 20
+        period_idx = video_time_sec // 600
         if period_idx != current_period:
             if counted_cars_in_period_lane_1:
                 save_counted_cars(counted_cars_in_period_lane_1, save_root_lane_1, current_period)

@@ -40,7 +40,7 @@ object_state = {}
 region_lines = []
 
 model = YOLO(YOLO_MODEL)  # Load model from .env or default
-# model.to("cuda")  # Move model to GPU
+model.to("cuda")  # Move model to GPU
 print(f"[INFO] YOLO model is using device: {model.device}")
 
 # Step 1: Select Line A -> B

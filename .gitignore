@@ -85,5 +85,6 @@ ToolCountJS/__MACOSX/
 
 # Video files
 video/
+video_old/
 
 .env
